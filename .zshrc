@@ -93,7 +93,6 @@ alias mount-nautilus="mount-robust nautilus:/neurospin/tmp/ljalouzot ~/mnt/nauti
 # JZ specific config
 if [[ "$(whoami)" == "uml34gj" ]]; then
   export UV_HTTP_TIMEOUT=36000
-  export TRANSFORMERS_OFFLINE=1 # job will try to fetch from cache instead of trying to download
 
   # Switch between projects (ex switch ioj)
   switch() {
