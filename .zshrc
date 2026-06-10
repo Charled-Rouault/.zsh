@@ -86,7 +86,7 @@ mount-robust() {
   echo "Mounted $1 -> $2"
 }
 alias mount-unicog="mount-robust unicog:/data/ljalouzot ~/mnt/unicog"
-alias mount-jz="mount-robust jz-karavela:/linkhome/rech/genscp01/uml34gj ~/mnt/jz"
+alias mount-jz="mount-robust jz:/linkhome/rech/genscp01/uml34gj ~/mnt/jz"
 alias mount-coml="mount-robust oberon:/scratch2/ljalouzot ~/mnt/coml"
 alias mount-nautilus="mount-robust nautilus:/neurospin/tmp/ljalouzot ~/mnt/nautilus"
 
