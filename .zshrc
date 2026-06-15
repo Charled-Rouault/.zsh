@@ -183,6 +183,7 @@ function _auto_venv() {
 # Register the hook (chpwd is called whenever the current directory changes)
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _auto_venv
+eval "$(direnv hook zsh)"
 
 # Check for virtual environment at login
 _auto_venv
