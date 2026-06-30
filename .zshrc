@@ -93,6 +93,7 @@ alias mount-nautilus="mount-robust nautilus:/neurospin/tmp/ljalouzot ~/mnt/nauti
 # JZ specific config
 if [[ "$(whoami)" == "uml34gj" ]]; then
   export UV_HTTP_TIMEOUT=36000
+  export UV_PREVIEW_FEATURES=centralized-project-envs
 
   # Switch between projects (ex switch ioj)
   switch() {
@@ -163,23 +164,24 @@ fi
 
 # Auto-activate/deactivate Python virtual environments on directory change
 # Uses chpwd hook which triggers on ANY directory change (cd, z, pushd, popd, etc.)
-function _auto_venv() {
+_auto_venv() {
   # First, handle deactivation if we've left the current venv's directory
-  if [[ -n "$VIRTUAL_ENV" ]]; then
-    local parentdir="$(dirname "$VIRTUAL_ENV")"
-    if [[ "$PWD"/ != "$parentdir"/* ]]; then
+  if [[ -n "$VIRTUAL_ENV" && -n "$VENV_PROJECT_DIR" ]]; then
+    if [[ "$PWD"/ != "$VENV_PROJECT_DIR"/* ]]; then
       echo "🔌 Deactivating virtual environment from $VIRTUAL_ENV"
-      deactivate
+      type deactivate >/dev/null 2>&1 && deactivate || unset VIRTUAL_ENV
+      unset VENV_PROJECT_DIR
     fi
   fi
 
   # Then, activate a new venv if present and not already active
-  if [[ -z "$VIRTUAL_ENV" && -d ./.venv ]]; then
-    echo "📦 Activating virtual environment in $(pwd)/.venv"
-    . .venv/bin/activate
+  if [[ -z "$VIRTUAL_ENV" && -f .venv/bin/activate ]]; then
+    echo "📦 Activating virtual environment in $PWD/.venv"
+    export VENV_PROJECT_DIR="$PWD"
+    source .venv/bin/activate
   fi
 }
-
+c
 # Register the hook (chpwd is called whenever the current directory changes)
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _auto_venv
@@ -193,3 +195,6 @@ _auto_venv
 
 # MLFlow: disable background jobs (introduced in recent versions, default: true)
 export MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false
+
+# Added by Antigravity CLI installer
+export PATH="/linkhome/rech/genscp01/uml34gj/.local/bin:$PATH"
