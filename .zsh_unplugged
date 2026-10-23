@@ -52,3 +52,12 @@ function plugin-load {
     (( $+functions[zsh-defer] )) && zsh-defer . $initfile || . $initfile
   done
 }
+##? Update all plugins (git pull each clone in $ZPLUGINDIR).
+function plugin-update {
+  local plugdir
+  : ${ZPLUGINDIR:=${ZDOTDIR:-~/.config/zsh}/plugins}
+  for plugdir in $ZPLUGINDIR/*/.git(N/); do
+    echo "Updating ${plugdir:h:t}..."
+    git -C ${plugdir:h} pull --quiet --ff --recurse-submodules --depth 1 --rebase --autostash
+  done
+}

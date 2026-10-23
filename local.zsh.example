@@ -1,0 +1,16 @@
+# Machine-specific settings, copied to local.zsh by install.sh (local.zsh is not versioned).
+# Sourced early in .zshrc, so variables set here are seen by tools.zsh, clusters.zsh and prompt.zsh.
+
+# Prompt
+# ZSH_HOST_COLOR=7              # force the host segment color (0-255), default: hash of the hostname
+# ZSH_PROMPT_GIT_STATUS=0       # disable git status in the prompt (huge repos on Lustre/GPFS)
+
+# Tools
+# ZSH_TOOLS_AUTO_INSTALL=0      # don't auto-install missing tools into ~/.local/bin
+
+# Clusters
+# JZ_PROJECT=abc                # Jean Zay project: accounts abc@cpu, abc@h100, ... (default: $IDRPROJ)
+# LUMI_PROJECT=project_465000000
+
+# sshfs mounts
+# alias mount-jz="mount-robust jz:/linkhome/rech/genXXX01/uxx00xx ~/mnt/jz"

@@ -1,1 +1,4 @@
-plugins
+plugins/
+local.zsh
+.api_keys
+.zcompdump*

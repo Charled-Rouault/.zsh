@@ -1,0 +1,114 @@
+# Starship prompt template (https://starship.rs/config/). Requires a Nerd Font in the local terminal.
+# prompt.zsh fills __HOST_BG__/__HOST_FG__ per machine and writes the result to ~/.cache/zsh.
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Two lines: segments on the left, context on the right, prompt character below
+format = """
+([](fg:host_bg)$username$hostname[](fg:host_bg) )\
+([](fg:dir_bg)$directory[](fg:dir_bg) )\
+([](fg:git_bg)$git_branch$git_status$git_state[](fg:git_bg) )\
+$fill\
+([](fg:err_bg)$status[](fg:err_bg) )\
+([](fg:dur_bg)$cmd_duration[](fg:dur_bg) )\
+([](fg:job_bg)$jobs[](fg:job_bg) )\
+([](fg:py_bg)$python$conda[](fg:py_bg) )\
+([](fg:node_bg)$nodejs[](fg:node_bg) )\
+([](fg:time_bg)$time[](fg:time_bg))
+$character"""
+
+add_newline = true
+palette = 'host'
+# Keep the prompt snappy on slow filesystems (Lustre/GPFS): give up on slow commands and file scans
+command_timeout = 500
+scan_timeout = 30
+
+[palettes.host]
+host_bg = '__HOST_BG__'
+host_fg = '__HOST_FG__'
+dir_bg = '31'
+git_bg = '71'
+err_bg = '124'
+dur_bg = '179'
+job_bg = '66'
+py_bg = '178'
+node_bg = '28'
+time_bg = '239'
+
+[fill]
+symbol = ' '
+
+[username]
+format = '[ $user](bg:host_bg fg:host_fg)'
+show_always = false
+
+[hostname]
+ssh_only = false
+ssh_symbol = '󰣀 '
+format = '[ $ssh_symbol$hostname ](bold bg:host_bg fg:host_fg)'
+
+[directory]
+format = '[ $path$read_only ](bg:dir_bg fg:255)'
+read_only = ' 󰌾'
+truncation_length = 4
+truncation_symbol = '…/'
+truncate_to_repo = false
+fish_style_pwd_dir_length = 1
+
+[git_branch]
+symbol = ' '
+format = '[ $symbol$branch(:$remote_branch) ](bg:git_bg fg:16)'
+
+[git_status]
+disabled = __GIT_STATUS_DISABLED__
+ignore_submodules = true
+format = '[($all_status$ahead_behind )](bg:git_bg fg:16)'
+conflicted = '='
+ahead = '⇡${count}'
+behind = '⇣${count}'
+diverged = '⇕⇡${ahead_count}⇣${behind_count}'
+untracked = '?${count}'
+stashed = '*${count}'
+modified = '!${count}'
+staged = '+${count}'
+renamed = '»${count}'
+deleted = '✘${count}'
+
+[git_state]
+format = '[ $state( $progress_current/$progress_total) ](bold bg:git_bg fg:16)'
+
+[status]
+disabled = false
+symbol = '✘'
+format = '[ $symbol $status ](bg:err_bg fg:255)'
+
+[cmd_duration]
+min_time = 3_000
+format = '[ 󰔟 $duration ](bg:dur_bg fg:16)'
+
+[jobs]
+symbol = ' '
+format = '[ $symbol$number ](bg:job_bg fg:255)'
+number_threshold = 1
+
+[python]
+symbol = ' '
+format = '[ ${symbol}${version}( \($virtualenv\)) ](bg:py_bg fg:16)'
+
+[conda]
+ignore_base = true
+symbol = ' '
+format = '[ $symbol$environment ](bg:py_bg fg:16)'
+
+[nodejs]
+symbol = ' '
+format = '[ $symbol$version ](bg:node_bg fg:255)'
+
+[time]
+disabled = false
+time_format = '%H:%M:%S'
+format = '[  $time ](bg:time_bg fg:250)'
+
+[character]
+success_symbol = '[❯](bold green)'
+error_symbol = '[❯](bold red)'
+vimcmd_symbol = '[❮](bold green)'

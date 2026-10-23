@@ -1,166 +1,203 @@
 #!/bin/zsh
-# TODO: switch to https://github.com/starship/starship
+# Portable zsh config for macOS and HPC clusters (Jean Zay, LUMI, ...).
+# See README.md for installation.
 
-# Zsh config directory (same location as this file)
+# Zsh config directory (same location as this file, resolving the ~/.zshrc symlink)
 ZDOTDIR="${${(%):-%N}:A:h}"
+ZSH_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+[[ -d "$ZSH_CACHE_DIR" ]] || mkdir -p "$ZSH_CACHE_DIR"
 
-# Plugin directory
-[[ ! -d "${ZDOTDIR}/plugins" ]] && mkdir -p "${ZDOTDIR}/plugins"
+# User binaries first: tools auto-installed by tools.zsh land here
+export PATH="$HOME/.local/bin:$PATH"
+typeset -U path fpath  # deduplicate PATH/fpath entries
 
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${ZDOTDIR}/plugins/powerlevel10k/powerlevel10k.zsh-theme" ]]; then
-  source "${ZDOTDIR}/plugins/powerlevel10k/powerlevel10k.zsh-theme"
+# Homebrew (macOS) so its tools are found even in non-login shells
+if [[ -z "$HOMEBREW_PREFIX" ]]; then
+  for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    [[ -x $_brew ]] && eval "$($_brew shellenv)" && break
+  done
+  unset _brew
 fi
 
-# Source zsh_unplugged
-source "${ZDOTDIR}/.zsh_unplugged"
+# Machine-specific settings (not versioned), loaded early so they can set variables used below
+[[ -f "$ZDOTDIR/local.zsh" ]] && source "$ZDOTDIR/local.zsh"
 
-# Plugins list
+# Auto-install missing CLI tools (starship, fzf, zoxide, eza, bat, fd, direnv) into ~/.local/bin
+source "$ZDOTDIR/tools.zsh"
+
+# Environment modules on clusters: zsh does not read /etc/profile.d, so init Lmod/modules if needed
+if (( ! $+functions[module] )); then
+  for _modinit in /usr/share/lmod/lmod/init/zsh /usr/share/Modules/init/zsh; do
+    [[ -r $_modinit ]] && source $_modinit && break
+  done
+  unset _modinit
+fi
+
+# ==========================
+# Completion
+# ==========================
+
+# Plugin directory and loader (https://github.com/mattmc3/zsh_unplugged)
+ZPLUGINDIR="$ZDOTDIR/plugins"
+source "$ZDOTDIR/.zsh_unplugged"
+
+# Extra completion definitions must be on fpath before compinit
+plugin-load zsh-users/zsh-completions
+
+autoload -Uz compinit
+# Only rebuild the completion dump once a day (speeds up startup, especially on Lustre/GPFS)
+_stale_dump=($ZSH_CACHE_DIR/zcompdump(N.mh+24))
+if (( $#_stale_dump )) || [[ ! -s $ZSH_CACHE_DIR/zcompdump ]]; then
+  compinit -i -d "$ZSH_CACHE_DIR/zcompdump"
+else
+  compinit -C -d "$ZSH_CACHE_DIR/zcompdump"
+fi
+unset _stale_dump
+
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'  # case-insensitive, fuzzy-ish
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+zstyle ':completion:*' menu no  # let fzf-tab handle the menu
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "$ZSH_CACHE_DIR/zcompcache"
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*:git-checkout:*' sort false
+
+# ==========================
+# Plugins
+# ==========================
+
 repos=(
-  "romkatv/powerlevel10k"
-  # "axieax/zsh-starship"
-  "zdharma-continuum/fast-syntax-highlighting"
   "zsh-users/zsh-history-substring-search"
   "zsh-users/zsh-autosuggestions"
-  "agkozak/zsh-z" # 'z' directory jumping
+  "zdharma-continuum/fast-syntax-highlighting"  # keep last
 )
-
-# Load plugins
+# fzf-tab replaces the completion menu with fzf; must load after compinit, before autosuggestions
+(( $+commands[fzf] )) && repos=("Aloxaf/fzf-tab" $repos)
+# Fallback directory jumping when zoxide is unavailable
+(( $+commands[zoxide] )) || repos+=("agkozak/zsh-z")
 plugin-load $repos
 
-# zsh-history-substring-search configuration
+zstyle ':fzf-tab:*' switch-group '<' '>'
+(( $+commands[eza] )) && zstyle ':fzf-tab:complete:(cd|z|__zoxide_z):*' fzf-preview 'eza -1 --color=always --icons $realpath'
+
 export HISTORY_SUBSTRING_SEARCH_ENSURE_UNIQUE=1
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 
-# History configuration
+# ==========================
+# History & options
+# ==========================
+
 HISTFILE="$HOME/.zsh_history"
-HISTSIZE=10000
-SAVEHIST=10000
-setopt APPEND_HISTORY
-setopt SHARE_HISTORY
-setopt INC_APPEND_HISTORY
-
-# Add ~/.local/bin to PATH
-export PATH="$HOME/.local/bin:$PATH"
-
-# Git configuration: set global gitignore if not already set and if ~/.gitignore exists
-[ -z "$(git config --global core.excludesfile)" ] && [ -f ~/.gitignore ] && git config --global core.excludesfile ~/.gitignore
-
-# Source API keys if available
-[[ -f "$ZDOTDIR/.api_keys" ]] && source "$ZDOTDIR/.api_keys"
+HISTSIZE=100000
+SAVEHIST=100000
+setopt EXTENDED_HISTORY       # save timestamps
+setopt SHARE_HISTORY          # share history across sessions (implies incremental append)
+setopt HIST_IGNORE_DUPS       # don't record consecutive duplicates
+setopt HIST_IGNORE_SPACE      # commands starting with a space are not recorded
+setopt HIST_REDUCE_BLANKS
+setopt HIST_VERIFY            # show !! expansions before running them
+setopt AUTO_CD                # type a directory name to cd into it
+setopt AUTO_PUSHD PUSHD_IGNORE_DUPS PUSHD_SILENT
+setopt INTERACTIVE_COMMENTS   # allow # comments in the interactive shell
+setopt NO_BEEP
 
 # Set WORDCHARS to exclude "/"
 WORDCHARS='*?_-.[]~=&;!#$%^(){}<>|`@'
 
-# Bind keys for history substring search
-bindkey "^[[1;3A" history-substring-search-up # Alt+Up
-bindkey "^[[1;3B" history-substring-search-down # Alt+Down
-
+# ==========================
 # Key bindings
-bindkey '^H' backward-kill-word # Ctrl+Backspace
-bindkey '^[[3;5~' kill-word # Ctrl+Delete
-bindkey '^[[1;3C' forward-word # Ctrl+Right
-bindkey '^[[1;3D' backward-word # Ctrl+Left
-bindkey '^[[1;5C' forward-word # Ctrl+Right
-bindkey '^[[1;5D' backward-word # Ctrl+Left
+# ==========================
 
-# Custom aliases
+bindkey -e
+# History substring search: type a prefix then Up/Down (or Alt+Up/Down)
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+bindkey '^[OA' history-substring-search-up
+bindkey '^[OB' history-substring-search-down
+bindkey '^[[1;3A' history-substring-search-up    # Alt+Up
+bindkey '^[[1;3B' history-substring-search-down  # Alt+Down
+
+# Word navigation / deletion (Linux terminals, VSCode, and macOS Terminal/iTerm2 Option+arrows)
+bindkey '^H' backward-kill-word       # Ctrl+Backspace
+bindkey '^[[3;5~' kill-word           # Ctrl+Delete
+bindkey '^[[1;3C' forward-word        # Alt+Right
+bindkey '^[[1;3D' backward-word       # Alt+Left
+bindkey '^[[1;5C' forward-word        # Ctrl+Right
+bindkey '^[[1;5D' backward-word       # Ctrl+Left
+bindkey '^[f' forward-word            # Option+Right (macOS Terminal)
+bindkey '^[b' backward-word           # Option+Left (macOS Terminal)
+bindkey '^[[H' beginning-of-line      # Home
+bindkey '^[[F' end-of-line            # End
+bindkey '^[[3~' delete-char           # Delete
+
+# Edit the current command in $EDITOR with Ctrl+X Ctrl+E
+autoload -Uz edit-command-line && zle -N edit-command-line
+bindkey '^X^E' edit-command-line
+
+# ==========================
+# Modern CLI tools (each only if installed)
+# ==========================
+
+# fzf: Ctrl+R history search, Ctrl+T file search, Alt+C cd into a directory
+if (( $+commands[fzf] )); then
+  source <(fzf --zsh)
+  (( $+commands[fd] )) && export FZF_DEFAULT_COMMAND='fd --type f --hidden --exclude .git' \
+    FZF_CTRL_T_COMMAND='fd --type f --hidden --exclude .git' \
+    FZF_ALT_C_COMMAND='fd --type d --hidden --exclude .git'
+  export FZF_DEFAULT_OPTS='--height 40% --layout reverse --border'
+fi
+
+# zoxide: `z foo` jumps to the most frecent directory matching foo, `zi` picks interactively
+(( $+commands[zoxide] )) && eval "$(zoxide init zsh)"
+
+# direnv: per-directory environment from .envrc
+(( $+commands[direnv] )) && eval "$(direnv hook zsh)"
+
+# eza: modern ls with git status and icons
+if (( $+commands[eza] )); then
+  alias ls='eza --group-directories-first'
+  alias ll='eza -laFh --git --icons --group-directories-first'
+  alias lt='eza --tree --level 2 --icons'
+else
+  alias ll='ls -laFh --color=auto'
+fi
+
+# bat: syntax-highlighted cat and man pages
+if (( $+commands[bat] )); then
+  alias cat='bat --paging=never --style=plain'
+  export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+  export MANROFFOPT='-c'
+fi
+
+# ==========================
+# Aliases & functions
+# ==========================
+
 alias t=tmux
 alias ta="tmux attach"
 alias tl="tmux ls"
+alias tcap="tmux capture-pane -p"
+alias tcapS="tmux capture-pane -pS -1000"
+alias c=clear
 alias sm="squeue --me"
 alias wsync="wandb sync --sync-all"
-alias ll="ls -laFh --color=auto"
-alias c=clear
 alias rclone-ui="rclone rcd --rc-web-gui"
 alias a=aichat
 alias ae="aichat -e"
-alias tcap="tmux capture-pane -p"
-alias tcapS="tmux capture-pane -pS -1000"
 
-# Mounts for local machine
+# Robust sshfs mount: mount-robust host:/path ~/mnt/dir (define your own aliases in local.zsh)
 mount-robust() {
   mkdir -p "$2"
   sshfs -o follow_symlinks,reconnect,delay_connect,ServerAliveInterval=5,ServerAliveCountMax=1,ConnectTimeout=5,ConnectionAttempts=1 "$@"
   echo "Mounted $1 -> $2"
 }
-alias mount-unicog="mount-robust unicog:/data/ljalouzot ~/mnt/unicog"
-alias mount-jz="mount-robust jz:/linkhome/rech/genscp01/uml34gj ~/mnt/jz"
-alias mount-coml="mount-robust oberon:/scratch2/ljalouzot ~/mnt/coml"
-alias mount-nautilus="mount-robust nautilus:/neurospin/tmp/ljalouzot ~/mnt/nautilus"
 
-# JZ specific config
-if [[ "$(whoami)" == "uml34gj" ]]; then
-  export UV_HTTP_TIMEOUT=36000
-  export UV_PREVIEW_FEATURES=centralized-project-envs
+# Git: set global gitignore if not already set and if ~/.gitignore exists
+[[ -f ~/.gitignore && -z "$(git config --global core.excludesfile)" ]] && git config --global core.excludesfile ~/.gitignore
 
-  # Switch between projects (ex switch ioj)
-  switch() {
-    if [ -z "$1" ]; then
-      echo "Usage: switch <environment_name>"
-      return 1
-    fi
-    eval $(idrenv -d $1)
-  }
-
-  # Disable Bytecode Writing to force Python to run strictly in memory (faster startup)
-  export PYTHONDONTWRITEBYTECODE=1
-
-  # Source environment modules
-  export ENV_MODULES=/lustre/fshomisc/sup/spack_soft/environment-modules/current/init/zsh
-  [[ -s $ENV_MODULES ]] && source $ENV_MODULES
-  # Old:
-  # [[ -s "/usr/share/Modules/init/zsh" ]] && source /usr/share/Modules/init/zsh
-
-  # Set default SLURM default options
-  # export SBATCH_ACCOUNT=ioj@cpu
-  export SLURM_ACCOUNT=ioj@cpu
-  # export SBATCH_CPUS_PER_TASK=2
-  export SLURM_CPUS_PER_TASK=2
-  # export SBATCH_PARTITION=cpu_p1,prepost,visu,compil,compil_h100
-  export SLURM_PARTITION=cpu_p1,prepost,visu,compil,compil_h100
-  # export SBATCH_HINT=nomultithread
-  export SLURM_HINT=nomultithread
-  # export SBATCH_TIMELIMIT=2:00:00
-  export SLURM_TIMELIMIT=2:00:00
-
-  # SLURM sacct configuration
-  export FMT="jobid,state,partition,jobname,reqcpus,reqmem,nodelist,timelimit,submit,start,end,elapsed,account"
-  alias sacct="sacct -X --format=${FMT} --units G"
-
-  # Aliases for running interactive jobs
-  function cpu() {
-    srun --qos=qos_cpu-dev "$@" -D "$(pwd)" --pty zsh -i
-  }
-  alias v100="srun --gres=gpu:1 --constraint=v100 --cpus-per-task=10 --account=emi@v100 --partition=gpu_p13 --qos=qos_gpu-dev --time=2:00:00 -D $(pwd) --pty zsh -i"
-  alias a100="srun --gres=gpu:1 --constraint=a100 --cpus-per-task=8 --account=emi@a100 --partition=gpu_p5 --qos=qos_gpu_a100-dev --time=2:00:00 -D $(pwd) --pty zsh -i"
-  alias h100="srun --gres=gpu:1 --constraint=h100 --cpus-per-task=24 --account=ioj@h100 --partition=gpu_p6 --qos=qos_gpu_h100-dev --time=2:00:00 -D \$(pwd) --pty zsh -i"
-  alias 2h100="srun --gres=gpu:2 --constraint=h100 --cpus-per-task=48 --account=ioj@h100 --partition=gpu_p6 --qos=qos_gpu_h100-dev --time=2:00:00 -D \$(pwd) --pty zsh -i"
-  alias 3h100="srun --gres=gpu:3 --constraint=h100 --cpus-per-task=72 --account=ioj@h100 --partition=gpu_p6 --qos=qos_gpu_h100-dev --time=2:00:00 -D \$(pwd) --pty zsh -i"
-  alias 4h100="srun --gres=gpu:4 --constraint=h100 --cpus-per-task=96 --account=ioj@h100 --partition=gpu_p6 --qos=qos_gpu_h100-dev --time=2:00:00 -D \$(pwd) --pty zsh -i"
-
-  # VSCode tunnel settings
-  # Enable token file authentification for consistency across nodes
-  export VSCODE_CLI_USE_FILE_KEYCHAIN=1
-  export VSCODE_CLI_DATA_DIR=~/.vscode-cli
-  # Export one machine ID if file does not exist
-  [[ -s "$HOME/.machine_id" ]] || cat /etc/machine-id > $HOME/.machine_id
-  # Alias to launch VSCode tunnel with fixed machine ID to avoid relogging on different HPC nodes
-  alias tunnel="unshare -r -m -u -f sh -c 'mount --bind $HOME/.machine_id /etc/machine-id; hostname hpc-tunnel; code tunnel --name jz --accept-server-license-terms'"
-
-  export SINGULARITY_TMPDIR=~/.singularity/tmp
-
-  # Proxy for MLFlow logging on compute nodes (need running `gost -L http://0.0.0.0:8888 -F $http_proxy` on `jean-zay1`)
-  export BASH_ENV="$HOME/.slurm_env"
-  export SBATCH_EXPORT="ALL,BASH_ENV"
-
-  if [ -n "$SLURM_JOB_ID" ] && [ "$SLURM_JOB_PARTITION" != "prepost" ]; then
-    FRONTAL_IP=$(getent hosts jean-zay1 | awk '{print $1}')
-    export HTTP_PROXY="http://${FRONTAL_IP}:8888"
-    export HTTPS_PROXY="http://${FRONTAL_IP}:8888"
-  fi
-fi
+# Source API keys if available (not versioned)
+[[ -f "$ZDOTDIR/.api_keys" ]] && source "$ZDOTDIR/.api_keys"
 
 # Auto-activate/deactivate Python virtual environments on directory change
 # Uses chpwd hook which triggers on ANY directory change (cd, z, pushd, popd, etc.)
@@ -181,20 +218,32 @@ _auto_venv() {
     source .venv/bin/activate
   fi
 }
-c
-# Register the hook (chpwd is called whenever the current directory changes)
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _auto_venv
-eval "$(direnv hook zsh)"
-
-# Check for virtual environment at login
 _auto_venv
 
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh
-[[ ! -f $ZDOTDIR/.p10k.zsh ]] || source $ZDOTDIR/.p10k.zsh
+# nvm is slow to source: load it lazily on first use of nvm/node/npm/npx
+export NVM_DIR="$HOME/.nvm"
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+  _nvm_lazy() {
+    unset -f nvm node npm npx _nvm_lazy
+    source "$NVM_DIR/nvm.sh"
+    [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
+  }
+  for _cmd in nvm node npm npx; do
+    eval "$_cmd() { _nvm_lazy; $_cmd \"\$@\" }"
+  done
+  unset _cmd
+fi
 
 # MLFlow: disable background jobs (introduced in recent versions, default: true)
 export MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false
 
-# Added by Antigravity CLI installer
-export PATH="/linkhome/rech/genscp01/uml34gj/.local/bin:$PATH"
+# Cluster-specific configuration (Jean Zay, LUMI)
+source "$ZDOTDIR/clusters.zsh"
+
+# ==========================
+# Prompt
+# ==========================
+
+source "$ZDOTDIR/prompt.zsh"
